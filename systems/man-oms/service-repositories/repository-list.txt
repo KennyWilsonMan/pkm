@@ -1,0 +1,11 @@
+# Man OMS Pre-Trade Service Repositories
+# Add one repository URL per line
+# Format: git@github.com:org/repo-name.git or https://github.com/org/repo-name.git
+# Lines starting with # are comments and will be ignored
+
+# Example:
+# git@github.com:man-group/oms-service-example.git
+
+ssh://git@mangit.maninvestments.com:7999/oms/oms-trade-entry-dashboard.git
+ssh://git@mangit.maninvestments.com:7999/oms/oms-orderview-provider.git
+ssh://git@mangit.maninvestments.com:7999/oms/oms-implementation.git
