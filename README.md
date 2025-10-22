@@ -186,8 +186,95 @@ git@github.com:org/panorama-service-1.git
 
 This is a personal knowledge management system. All updates and documentation should reflect current understanding and implementation state of the three core systems.
 
+## Claude Code Integration
+
+This project includes custom Claude Code slash commands and MCP (Model Context Protocol) integrations for enhanced development workflows.
+
+### Available Slash Commands
+
+#### `/get-order-by-id`
+Retrieves comprehensive order information from the OMS GraphQL UAT environment.
+
+**Usage:**
+```
+/get-order-by-id 175268
+```
+
+**What it does:**
+- Fetches complete order details including status, type, and dates
+- Retrieves security information (ISIN, CUSIP, Bloomberg identifiers)
+- Shows investment decision details and decision makers
+- Lists allocations across books, funds, and strategies
+- Displays ticket information
+- Provides execution and booking details with prices
+- Shows complete order event timeline
+- Highlights any compliance issues and overrides
+
+**Benefits:**
+- Optimized to use only 4 MCP calls instead of 7+
+- Pre-configured with correct GraphQL schema knowledge
+- Consistent, formatted output
+- Built-in error handling
+
+**Location:** `.claude/commands/get-order-by-id.md`
+
+### MCP Servers
+
+#### OMS GraphQL UAT (`omsGraphUAT`)
+Provides access to the Order Management System GraphQL UAT environment.
+
+**Available Tools:**
+- `graphql_query` - Execute GraphQL queries with size controls
+- `graphql_validate` - Validate queries before execution
+- `graphql_schema` - Retrieve the GraphQL schema
+- `graphql_list_queries` - Discover available queries with filtering
+- `graphql_expand_type` - Explore type definitions
+- `graphql_explore` - Execute queries with intelligent data aggregation
+- `graphql_introspect` - Full schema introspection
+- `oauth_status` - Check OAuth configuration
+
+**Authentication:**
+Run `/mcp` to authenticate with the OMS GraphQL UAT environment before using order-related commands.
+
+### Creating Custom Slash Commands
+
+To create a new slash command:
+
+1. Create a new `.md` file in `.claude/commands/`
+2. Define the command behavior and instructions
+3. Include specific GraphQL queries or tool usage patterns
+4. Document input/output format and error handling
+
+Example structure:
+```markdown
+# Command Name
+
+Description of what the command does.
+
+## Input
+What the user provides.
+
+## Task
+Step-by-step instructions for Claude Code.
+
+## Output Format
+How to present results.
+```
+
+### Sub-Agents
+
+Claude Code can launch specialized sub-agents for complex tasks:
+
+- **general-purpose** - Multi-step tasks, code search, complex operations
+- **Explore** - Fast codebase exploration with pattern matching
+- **statusline-setup** - Configure Claude Code status line
+- **output-style-setup** - Create custom output styles
+
+Use sub-agents when tasks require multiple rounds of exploration or complex multi-step operations.
+
 ## Notes
 
 - Repositories in `systems/` are read-only copies of main branches
 - Use this PKM for reference and analysis, not active development
 - Keep tools and documentation up to date as systems evolve
+- Slash commands are project-specific and optimized for this workflow
