@@ -1,0 +1,41 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__apolloGraph__graphql_list_queries",
+      "mcp__omsGraphUAT__graphql_query",
+      "Bash(if [ -d /turbo/kewilson/github/pkm/systems/thk/tomahawk2/.git ])",
+      "Bash(then echo \"Git repository found\")",
+      "Bash(fi)",
+      "Bash(source .venv/bin/activate)",
+      "Bash(pkm sync --system thk)",
+      "Bash(pkm sync --system thk --log-level DEBUG)",
+      "Bash(pkm --log-level DEBUG sync --system thk)",
+      "Bash(pkm --log-level DEBUG sync --system thk --branch master)",
+      "Bash(pkm sync --help)",
+      "Bash(pkm update --system thk)",
+      "Bash(pkm --log-level DEBUG update --system panorama)",
+      "Bash(pkm update --help)",
+      "Bash(pkm --help)",
+      "Bash(pkm update --system panorama)",
+      "Bash(cat /turbo/kewilson/github/pkm/systems/man-oms/service-repositories/repository-list.txt)",
+      "Bash(pkm update --system man-oms)",
+      "Bash(TEST_FILE.txt)",
+      "Bash(git add TEST_FILE.txt)",
+      "Bash(git commit -m \"Test commit for change detection\")",
+      "Bash(git push origin master)",
+      "Bash(git reset --hard HEAD~1)",
+      "Bash(pkm update)",
+      "Bash(pkm branches --system thk)",
+      "Bash(pkm branches)",
+      "Bash(git commit -m \"Local test commit\")",
+      "Bash(git reset --hard HEAD~2)",
+      "Bash(pkm branches --help)",
+      "Bash(pkm branches --system man-oms)",
+      "Bash(python -c \"import requests; print(requests.__version__)\")",
+      "Bash(pip install --timeout 60 --retries 5 requests)",
+      "Bash(pkm checkout --help)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

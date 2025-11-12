@@ -5,3 +5,4 @@
 
 # Example:
 # git@github.com:man-group/thk-service-example.git
+ssh://git@mangit.maninvestments.com:7999/ets/tomahawk2.git

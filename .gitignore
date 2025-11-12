@@ -3,6 +3,9 @@
 # but keep the repository-list.txt files
 systems/*/service-repositories/*/
 
+# Documentation
+systems/thk/docs/
+
 # Python
 __pycache__/
 *.py[cod]
