@@ -71,7 +71,7 @@ class RepositorySync:
         """Sync all repositories for a system.
 
         Args:
-            system: System name (thk, man-oms, panorama)
+            system: System name (thk, man-oms, GCP)
             branch: Branch to sync (default: None, which auto-detects the default branch)
 
         Returns:
@@ -128,7 +128,7 @@ class RepositorySync:
         """Clone all repositories for a system.
 
         Args:
-            system: System name (thk, man-oms, panorama)
+            system: System name (thk, man-oms, GCP)
             branch: Branch to clone (default: main)
 
         Returns:
@@ -179,7 +179,7 @@ class RepositorySync:
         """Update all repositories for a system (clone if doesn't exist, sync if it does).
 
         Args:
-            system: System name (thk, man-oms, panorama)
+            system: System name (thk, man-oms, GCP)
             branch: Branch to update (default: None, which auto-detects the default branch)
 
         Returns:
@@ -467,7 +467,7 @@ class RepositorySync:
         """Get status of all repositories for a system.
 
         Args:
-            system: System name (thk, man-oms, panorama)
+            system: System name (thk, man-oms, GCP)
 
         Returns:
             List of repository status dictionaries
@@ -505,7 +505,7 @@ class RepositorySync:
         """Get branch information for all repositories in a system.
 
         Args:
-            system: System name (thk, man-oms, panorama)
+            system: System name (thk, man-oms, GCP)
 
         Returns:
             List of dictionaries with repository name and branch information

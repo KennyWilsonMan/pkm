@@ -1,6 +1,27 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(pkm checkout:*)",
+      "Bash(notify-send:*)",
+      "Read",
+      "Grep",
+      "Glob",
+      "Write(pr-reviews/*)",
+      "mcp__bitbucket__bitbucket_get_pr_diff",
+      "mcp__bitbucket__bitbucket_get_pull_request_changes",
+      "mcp__bitbucket__bitbucket_get_pull_request",
+      "mcp__bitbucket__bitbucket_get_pr_activities",
+      "mcp__bitbucket__bitbucket_get_pr_commits",
+      "mcp__bitbucket__bitbucket_get_jira_issues_for_pr",
+      "mcp__bitbucket__bitbucket_get_pull_requests",
+      "mcp__bitbucket__bitbucket_browse_files",
+      "mcp__bitbucket__bitbucket_get_file_content",
+      "Bash(curl -X POST )",
+      "Bash(https://hooks.slack.com/triggers/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)"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "bitbucket"
-  ],
-  "enableAllProjectMcpServers": true
+  ]
 }

@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PR Review: MANOMS-9556: Add Keycloak Authentication Support to Positions API</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f6f8fa;
+            color: #24292e;
+        }
+
+        h1 {
+            border-bottom: 3px solid #0366d6;
+            padding-bottom: 10px;
+            color: #0366d6;
+        }
+
+        h2 {
+            border-bottom: 2px solid #e1e4e8;
+            padding-bottom: 8px;
+            margin-top: 30px;
+            color: #0366d6;
+        }
+
+        h3 {
+            margin-top: 25px;
+            color: #24292e;
+        }
+
+        h4 {
+            margin-top: 20px;
+            color: #586069;
+        }
+
+        code {
+            background-color: #f6f8fa;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+
+        pre {
+            background-color: #f6f8fa;
+            padding: 16px;
+            border-radius: 6px;
+            overflow-x: auto;
+            border: 1px solid #e1e4e8;
+            line-height: 1.45;
+        }
+
+        pre code {
+            background-color: transparent;
+            padding: 0;
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+            font-size: 12px;
+        }
+
+        pre code.diff {
+            display: block;
+        }
+
+        pre code.diff span {
+            padding: 0 10px;
+            margin: 0;
+        }
+
+        a {
+            color: #0366d6;
+            text-decoration: none;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        ul {
+            padding-left: 30px;
+        }
+
+        li {
+            margin: 8px 0;
+        }
+
+        strong {
+            color: #24292e;
+            font-weight: 600;
+        }
+
+        img {
+            max-width: 100%;
+            height: auto;
+            border: 1px solid #e1e4e8;
+            border-radius: 6px;
+            margin: 20px 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        hr {
+            border: 0;
+            border-top: 2px solid #e1e4e8;
+            margin: 30px 0;
+        }
+
+        .critical {
+            color: #d73a49;
+        }
+
+        .warning {
+            color: #f9c513;
+        }
+
+        .info {
+            color: #0366d6;
+        }
+
+        .success {
+            color: #28a745;
+        }
+    </style>
+</head>
+<body>
+<h1>PR Review: MANOMS-9556: Add Keycloak Authentication Support to Positions API</h1><p><strong>Repository</strong>: GCP/manos-positions-api
+<strong>Branch</strong>: MANOMS-9556-keycloak-auth-support
+<strong>Author</strong>: Yarden Jacobson (London)
+<strong>PR Link</strong>: https://mangit.maninvestments.com/projects/GCP/repos/manos-positions-api/pull-requests/134/overview
+<strong>Reviewed</strong>: 2025-11-13 12:47:00
+<strong>Review Mode</strong>: Automated</p><h2>Summary</h2><p>This PR implements multi-issuer JWT authentication support for the Positions API, enabling authentication from both the existing auth service and Keycloak OAuth providers. The implementation uses a "lightest touch" approach to maintain backward compatibility while adding new Keycloak support. The changes are well-structured, properly tested, and follow clean code principles.</p><p>---</p><h2>🎯 Entry Points Analysis</h2><h3>Changed Code Units</h3><p>The authentication changes affect the core authentication pipeline:</p><ul>
+<li><strong><code>AuthenticationService</code></strong> - Loads and manages authentication configuration from multiple providers</li>
+<li><strong><code>ConfigureJwtBearerOptions</code></strong> - Configures JWT bearer token validation with multi-issuer support</li>
+<li><strong><code>ClaimsMapper</code></strong> - Maps name claims from different identity providers to standardized format</li>
+<li><strong><code>Startup.ConfigureAddAuthentication()</code></strong> - Wires up authentication services in DI container</li>
+</ul><h3>Entry Points Affected</h3><h4>🌐 GraphQL API: All authenticated endpoints</h4><p><strong>Entry Point</strong>: <code>app.UseGraphQL<ISchema>()</code> (Startup.cs:167)</p><p><strong>Call Path</strong>:
+<pre><code class="">HTTP Request → GraphQL Middleware → UseAuthentication() → JwtBearerHandler
+    → ConfigureJwtBearerOptions.Configure() → TokenValidationParameters (multi-issuer)
+    → OnTokenValidated event → ClaimsMapper.MapNameClaimForIssuer()
+    → GraphQL Query Execution → Authorization policies
+</code></pre><p><strong>Protected Queries</strong> (require authentication):
+<ul>
+<li><strong>"Auth" policy</strong> (requires authenticated user + app claim):</li>
+<li><code>books</code> - Book queries</li>
+<li><code>positions</code> - Position queries</li>
+<li><code>booksPnL</code> - P&L queries</li>
+<li><code>positionSearch</code> - Search functionality</li>
+<li><code>workingOrders</code> - Working orders</li>
+<li><code>aggregateBookMetricByAttribute</code> - Aggregations</li>
+<li><code>benchmarks</code> - Benchmark data</li>
+<li><code>bookAndFundCapital</code> - Capital queries</li>
+<li><code>currentUser</code> - User context</li>
+<li><code>support</code> - Support queries</li>
+</ul><ul>
+<li><strong>"JustAuthenticatedUser" policy</strong> (requires authenticated user only):</li>
+<li><code>activeBooks</code> - Active books listing</li>
+<li><code>currencies</code> - Currency data</li>
+<li><code>fxRates</code> - FX rates</li>
+</ul><p><strong>Impact</strong>: All authenticated GraphQL queries now support both legacy auth service tokens AND Keycloak tokens.</p><h3>Impact Summary</h3><ul>
+<li><strong>Total Entry Points</strong>: 1 (GraphQL API endpoint)</li>
+<li><strong>User-Facing</strong>: All authenticated GraphQL queries (15+ query types)</li>
+<li><strong>System-to-System</strong>: Any service calling the Positions API with JWT tokens</li>
+<li><strong>Background Jobs</strong>: None directly affected (authentication is request-based)</li>
+</ul><h3>Authentication Flow Changes</h3><p><strong>Before this PR</strong>:
+<pre><code class="">Request with JWT → Validate against single issuer/audience → Extract claims → Authorize
+</code></pre><p><strong>After this PR</strong>:
+<pre><code class="">Request with JWT → Validate against multiple issuers/audiences
+    → Detect issuer type (Auth Service vs Keycloak)
+    → Use issuer-specific name claim mapping
+    → Ensure domain prefix (MANINVESTMENTS\)
+    → Authorize
+</code></pre><p>---</p><h2>📊 Diagrams</h2><h3>System Architecture - Changed Components</h3><img src="https://www.plantuml.com/plantuml/svg/bLJBRjim4BphAxRfiJ0Az06aEXJnIuxIs5OURGv53eIujXUMI9QaxBf5_xqhgvBZo7PG7GI9EvpPdLtomdbXVP5dmIk9Cr88NoVzo-vaD1p0w-7xw5qqQ2BZwI2EuZ8GHT6d_eScC1a-CFWy-ZWy3m9FFaEuspYFENHjkY2FgIyiGWUIMuXp8r8V1FnUYZd2MInHyPuD95QlIA9rP_0x07w-N-DSf1le5du1TsXNbEBZBhyAymKtQQR54gObx6dupnEHH3lof9M3RX8t_2ChpEBc6ePA6atAjyXBoZAxL9IROKnIPhWMbjEepJW4R7BT1_Mrcj6SdRXQ-nuoYvsQRL8jO2OeTsDX3Dh7qjsTYBRqgqecqHcbXAwLT5tLJO7sMVof9GEzLivR57djxSxudjPBTcNRofphQelq4Z9uj2b9TtmenlA7UzhfV3vfTWXN3_TmhvUeWbR7_sTpS0gu9JhHf12QO70ATo2Xfj8GHkWXTewRuzvs2qcesFcN-VPd8WJ-WcejU1PxMNuYSgmsm_t6iFhBjXoRlH2-YOoay2YXFid1KVIMgZMV8THu9hd57mKwlY2KzWYMvWiFUdQi81wt-kY4CD5hS8Knsdh7WRp8F1c-YwXo6uIIl5pzTPp1b6QKGhhr8MVpICq3L19AvPR-diTCmwSoX4kcpD1L7ALanGAC-QV3Yum1gND12epb2_FdQPsZSx1NwxWihjDehAecb6w_WMaywFEQ99Vg5TeDpBI5-jJib2_ugxpu_m8=" alt="PlantUML Diagram" style="max-width: 100%; height: auto;"><h3>Call Stack - Authentication Flow</h3><img src="https://www.plantuml.com/plantuml/svg/pLZDRjiu4BxhAQRf9SOwQPfsWTQ7HLFRQjmsjjlQ6ooIOi5Aj4r4fbIIikCzB_e0YzrptssVe8_GeNuSMQOKoMc1vE04vd3cupVV38Tv8HKHAfnxrWENJXYdqEsFtly13xjFx6Exi_vst6-VdlHVTJlmq8v-rYjdWqxFxYKBpzjFrmlzxZcwUMR_sdrcMOefZy99g6QKA-OGnNmEjkSlM_1Aa63sxYsyfvz3AXNy_-KV-9rup2MAkj1pzGQrigm0WJA71OGhs6jx3B-_vFlZtgCFL2oOGnjxCVPDmyJx9JzZhklH9H5qx-OqcxQRy2fjURrKBoaQY5F2qLOK6hPzFc7JKD3rZa6WeyXBVf5I-75lpMOPiEIyLJQsFSBcyem40HLeZob1K_miuEXTICKgUmIhWEY3tmgORS7fQ3HSv_8NU7q-Wf5_HRb57CKMc5FpJWnbTAWZbUMb1KFXErJAD6OcJia-35VcLKVTJcqhAs2Q2RHbYkwtjskd5MM0LK5Lp5jI2cWp98BCgQ92Pa9NSwWJMItoDjz6kKK0UrAYOEH-ev1pqzuyyqR_1xN8kj0U8N7KX3TqvNW-kVfekRGMif_2qadeOWcXHEy1JoJ1yhW9wP_7zuEbM4iVs9GpFiK4tWUshX36uU7XJoIegCyKLtuMIjNQvpvQ2pQTAV0dfcu5yEthltz3slK1-luI5iaTB85C2UFOMG7ceQTOW3SvYql_KQeYQL7kWWvKsFfCvqpl-VZ0UCl4Vc_KsGI9aY0A3za4ZqseOdFQi2pY9UqnTe7Gm1IXLhu7F4ixpXxT1IOwSbsVymXGZJentjGjm2_wcFferVP5N2NxB1cAcg0quaOUey5NZ2Yd1ACXH3_VldxvBnhXseEpuQ2FarMoS00TLAAZPA81c0X_7kDOMumbJPSFP40TDc4EE3eOg5M0OaaDJrnNWklFKLyG29mRhwEb6ot5D9gugTDSrXIETFGCZz6lF7qLAZo2LRdXc5DxeGzCXQ3kdw6aWYF69iIVClmKzHqTfcxlAMUi08lDaF494pYopOboPjY3utpjvgxB9Og-4-Lr6ALrFprYOpUFA1IuoU2XJcW2iCnVhV9FNnem3gBotsA_kAnsQSf57UlsWJV6CHICwm7Usq9Wc4ODUiqDl2KJVNReTNLjYrk4cPkqe-25mtt-yO7gkQPEY5wN38Sw7GwGKqMlywqujpCVAF5dZj6UKUSgEfals5_nStJeUynP5NWfuISomUU7nCjnYvbRG6xbmFpUIfvLnqT7-AJg44KiwidareGUN_p0Et0pbJPXtjrkmjeNOLMeR_qfd1EXvyLTYt3t6XnpacZ7q2XC0zOTwk_fqUFoU6NLTnUvOM0zrbcMKT0RDVu2xVH_aRu3" alt="PlantUML Diagram" style="max-width: 100%; height: auto;"><p>---</p><h2>File-by-File Review</h2><h3>📄 <code>src/Man.ManOS.Positions.Api/Services/Auth/AuthenticationService.cs</code></h3><p><strong><a href="https://mangit.maninvestments.com/projects/GCP/repos/manos-positions-api/pull-requests/134#src/Man.ManOS.Positions.Api/Services/Auth/AuthenticationService.cs">View in BitBucket</a></strong></p><h4>Changes Made</h4><p><strong>Lines 15-19: Changed from single issuer/audience to collections supporting multiple providers</strong></p><pre><code class="diff"><span style="background-color: #ffebe9; color: #24292e; display: block;">- private readonly string _audience;</span><span style="background-color: #ffebe9; color: #24292e; display: block;">- private readonly string _issuer;</span><span style="background-color: #ffebe9; color: #24292e; display: block;">- private readonly SecurityKey _issuerSigningKey;</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ private readonly HashSet<string> _audiences = new HashSet<string>();</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ private readonly HashSet<string> _issuers = new HashSet<string>();</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ private readonly List<SecurityKey> _issuerSigningKeys = new List<SecurityKey>();</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ private readonly HashSet<string> _nameClaimTypes = new HashSet<string>();</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ private readonly Dictionary<string, HashSet<string>> _issuerToNameClaimTypes = new Dictionary<string, HashSet<string>>();</span><span style="display: block;"></span></code></pre><p>This is the core architectural change enabling multi-issuer support. Using <code>HashSet<string></code> for audiences/issuers provides O(1) lookup performance. The new <code>_issuerToNameClaimTypes</code> dictionary enables issuer-specific claim mapping, which is critical for handling different token formats from different identity providers.</p><p><strong><a href="https://mangit.maninvestments.com/projects/GCP/repos/manos-positions-api/pull-requests/134#src/Man.ManOS.Positions.Api/Services/Auth/AuthenticationService.cs-15">View this change in BitBucket</a></strong></p><p><strong>Lines 26-35: Refactored constructor to load multiple authentication providers</strong></p><pre><code class="diff"><span style="background-color: #e6ffec; color: #24292e; display: block;">+ {</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     LoadExistingAuthService(configuration, logger, httpClientFactory, jsonSerializer);</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     LoadKeycloakConfiguration(configuration);</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     if (_issuers.Count == 0 || _audiences.Count == 0)</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     {</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+         logger.LogWarning("Authentication configuration incomplete: {IssuerCount} issuers, {AudienceCount} audiences",</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+             _issuers.Count, _audiences.Count);</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     }</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ }</span><span style="display: block;"></span></code></pre><p>Good separation of concerns - each provider has its own loading method. The warning log is helpful for diagnosing configuration issues.</p><p><strong><a href="https://mangit.maninvestments.com/projects/GCP/repos/manos-positions-api/pull-requests/134#src/Man.ManOS.Positions.Api/Services/Auth/AuthenticationService.cs-26">View this change in BitBucket</a></strong></p><p><strong>Lines 44-47: Added early return if auth service endpoint not configured</strong></p><pre><code class="diff"><span style="background-color: #e6ffec; color: #24292e; display: block;">+ if (string.IsNullOrEmpty(authEndpointUrl))</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ {</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     return;</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ }</span><span style="display: block;"></span></code></pre><p>This enables graceful degradation - if the legacy auth service isn't configured, the system can still work with Keycloak only. Good defensive coding.</p><p><strong><a href="https://mangit.maninvestments.com/projects/GCP/repos/manos-positions-api/pull-requests/134#src/Man.ManOS.Positions.Api/Services/Auth/AuthenticationService.cs-44">View this change in BitBucket</a></strong></p><p><strong>Lines 52-56: Fixed potential deadlock by using GetAwaiter().GetResult() instead of .Result</strong></p><pre><code class="diff"><span style="background-color: #ffebe9; color: #24292e; display: block;">- var getAuthSettingsResponse = httpClient.GetAsync(authEndpointUrl).Result;</span><span style="background-color: #ffebe9; color: #24292e; display: block;">-</span><span style="background-color: #ffebe9; color: #24292e; display: block;">- logger.LogInformation("auth settings response code {StatusCode}", getAuthSettingsResponse.StatusCode);</span><span style="background-color: #ffebe9; color: #24292e; display: block;">-</span><span style="background-color: #ffebe9; color: #24292e; display: block;">- if (getAuthSettingsResponse.StatusCode != HttpStatusCode.OK)</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ var response = httpClient.GetAsync(authEndpointUrl).GetAwaiter().GetResult();</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ if (response.StatusCode != HttpStatusCode.OK)</span><span style="display: block;"></span></code></pre><p>Using <code>.GetAwaiter().GetResult()</code> instead of <code>.Result</code> is the safer pattern for synchronous blocking when async context is not available (constructor initialization). This avoids potential deadlocks in certain synchronization contexts. Also removed unnecessary logging of status code before checking it.</p><p><strong><a href="https://mangit.maninvestments.com/projects/GCP/repos/manos-positions-api/pull-requests/134#src/Man.ManOS.Positions.Api/Services/Auth/AuthenticationService.cs-52">View this change in BitBucket</a></strong></p><p><strong>Lines 55-56: Improved error logging and added early return</strong></p><pre><code class="diff"><span style="background-color: #ffebe9; color: #24292e; display: block;">- logger.LogError("Error response:{AuthSettingsResponse}", getAuthSettingsResponse.Content.ReadAsStringAsync().Result);</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ logger.LogError("Auth service returned error status code: {StatusCode}", response.StatusCode);</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ return;</span><span style="display: block;"></span></code></pre><p>Better error message that's more descriptive. The early return prevents attempting to process an error response. Previously the code would have continued and likely thrown an exception when trying to deserialize error content.</p><p><strong><a href="https://mangit.maninvestments.com/projects/GCP/repos/manos-positions-api/pull-requests/134#src/Man.ManOS.Positions.Api/Services/Auth/AuthenticationService.cs-55">View this change in BitBucket</a></strong></p><p><strong>Lines 59-64: Changed to use collections and added name claim mapping</strong></p><pre><code class="diff"><span style="background-color: #ffebe9; color: #24292e; display: block;">- var authSettingsString = getAuthSettingsResponse.Content.ReadAsStringAsync().Result;</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ var authSettingsString = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();</span><span style="display: block;">  var authSettings = jsonSerializer.Deserialize<Dictionary<string, string>>(authSettingsString);</span><span style="display: block;"></span><span style="background-color: #ffebe9; color: #24292e; display: block;">- _audience = authSettings["audience"];</span><span style="background-color: #ffebe9; color: #24292e; display: block;">- _issuer = authSettings["issuer"];</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ _audiences.Add(authSettings["audience"]);</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ _issuers.Add(authSettings["issuer"]);</span><span style="display: block;"></span></code></pre><p>Migrated from single values to collections. Consistent use of <code>GetAwaiter().GetResult()</code>.</p><p><strong><a href="https://mangit.maninvestments.com/projects/GCP/repos/manos-positions-api/pull-requests/134#src/Man.ManOS.Positions.Api/Services/Auth/AuthenticationService.cs-59">View this change in BitBucket</a></strong></p><p><strong>Lines 70-81: Added name claim type registration for legacy auth service</strong></p><pre><code class="diff"><span style="background-color: #ffebe9; color: #24292e; display: block;">- _issuerSigningKey = new SigningCredentials(publicKey, SecurityAlgorithms.RsaSha256Signature).Key;</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ var signingKey = new SigningCredentials(publicKey, SecurityAlgorithms.RsaSha256Signature).Key;</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ _issuerSigningKeys.Add(signingKey);</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ var standardNameClaims = new HashSet<string></span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ {</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     "name", "unique_name", "sub",</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name",</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ };</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ _issuerToNameClaimTypes[authSettings["issuer"]] = standardNameClaims;</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ AddToGlobalNameClaimTypes(standardNameClaims);</span><span style="display: block;"></span></code></pre><p>Maps standard .NET claim types to the legacy auth service issuer. This ensures the legacy tokens continue to work with the new claim mapping system.</p><p><strong><a href="https://mangit.maninvestments.com/projects/GCP/repos/manos-positions-api/pull-requests/134#src/Man.ManOS.Positions.Api/Services/Auth/AuthenticationService.cs-70">View this change in BitBucket</a></strong></p><p><strong>Lines 84-119: Added new LoadKeycloakConfiguration method</strong></p><pre><code class="diff"><span style="background-color: #e6ffec; color: #24292e; display: block;">+ // Auth service may not be available in all environments</span><span style="display: block;">  catch (Exception e)</span><span style="display: block;">  {</span><span style="background-color: #ffebe9; color: #24292e; display: block;">-     logger.LogError(e, "error on auth service");</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     logger.LogError(e, "Failed to load auth service configuration");</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     }</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ }</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ private void LoadKeycloakConfiguration(IConfiguration configuration)</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ {</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     var authority = configuration["Authentication:OAuth:Authority"];</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     var audience = configuration["Authentication:OAuth:Audience"];</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     var defaultNameClaim = configuration["Authentication:OAuth:DefaultNameClaim"];</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     if (string.IsNullOrEmpty(authority) || string.IsNullOrEmpty(audience))</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     {</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+         return;</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     }</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     _issuers.Add(authority);</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     _audiences.Add(audience);</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     var keycloakNameClaims = new HashSet<string>();</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     if (!string.IsNullOrEmpty(defaultNameClaim))</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     {</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+         keycloakNameClaims.Add(defaultNameClaim);</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     }</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     var fallbacks = new[] { "preferred_username", "username", "name", "sub", "email" };</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     foreach (var fallback in fallbacks)</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     {</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+         keycloakNameClaims.Add(fallback);</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     }</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     _issuerToNameClaimTypes[authority] = keycloakNameClaims;</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     AddToGlobalNameClaimTypes(keycloakNameClaims);</span><span style="display: block;"></span></code></pre><p>New method to load Keycloak configuration from appsettings.json. Uses standard OAuth2/OIDC claim names. The fallback chain (<code>preferred_username</code> → <code>username</code> → <code>name</code> → <code>sub</code> → <code>email</code>) ensures compatibility with various Keycloak configurations. Note: No signing keys are added here because Keycloak uses OIDC discovery to automatically fetch keys via <code>/.well-known/openid-configuration</code>.</p><p><strong><a href="https://mangit.maninvestments.com/projects/GCP/repos/manos-positions-api/pull-requests/134#src/Man.ManOS.Positions.Api/Services/Auth/AuthenticationService.cs-84">View this change in BitBucket</a></strong></p><p><strong>Lines 121-127: Added helper method to aggregate name claim types</strong></p><pre><code class="diff"><span style="background-color: #e6ffec; color: #24292e; display: block;">+ private void AddToGlobalNameClaimTypes(IEnumerable<string> claimTypes)</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ {</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     foreach (var claimType in claimTypes)</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     {</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+         _nameClaimTypes.Add(claimType);</span><span style="display: block;">      }</span><span style="display: block;">  }</span><span style="display: block;"></span></code></pre><p>Helper method to maintain a global set of all name claim types. HashSet automatically handles duplicates with O(1) Add operations.</p><p><strong><a href="https://mangit.maninvestments.com/projects/GCP/repos/manos-positions-api/pull-requests/134#src/Man.ManOS.Positions.Api/Services/Auth/AuthenticationService.cs-121">View this change in BitBucket</a></strong></p><p><strong>Lines 129-164: Updated interface methods to return collections and added issuer-specific methods</strong></p><pre><code class="diff"><span style="background-color: #ffebe9; color: #24292e; display: block;">- public string GetAudience()</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ public IEnumerable<string> GetAudiences()</span><span style="display: block;">  {</span><span style="background-color: #ffebe9; color: #24292e; display: block;">-     return _audience;</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     return _audiences;</span><span style="display: block;">  }</span><span style="display: block;"></span><span style="background-color: #ffebe9; color: #24292e; display: block;">- public string GetIssuer()</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ public IEnumerable<string> GetIssuers()</span><span style="display: block;">  {</span><span style="background-color: #ffebe9; color: #24292e; display: block;">-     return _issuer;</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     return _issuers;</span><span style="display: block;">  }</span><span style="display: block;"></span><span style="background-color: #ffebe9; color: #24292e; display: block;">- public SecurityKey GetIssuerSigningKey()</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ public IEnumerable<SecurityKey> GetIssuerSigningKeys()</span><span style="display: block;">  {</span><span style="background-color: #ffebe9; color: #24292e; display: block;">-     return _issuerSigningKey;</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     return _issuerSigningKeys;</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ }</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ public IEnumerable<string> GetNameClaimTypes()</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ {</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     return _nameClaimTypes;</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ }</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ public IEnumerable<string> GetNameClaimTypesForIssuer(string issuer)</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ {</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     if (string.IsNullOrEmpty(issuer))</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     {</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+         return _nameClaimTypes; // Return all if no issuer specified</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     }</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     // Try to find issuer-specific name claims first</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     if (_issuerToNameClaimTypes.TryGetValue(issuer, out var issuerSpecificClaims))</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     {</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+         return issuerSpecificClaims;</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     }</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     // Fallback to global name claims if no issuer-specific mapping found</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     return _nameClaimTypes;</span><span style="display: block;">  }</span><span style="display: block;"></span></code></pre><p>Updated interface to support multi-issuer. The new <code>GetNameClaimTypesForIssuer()</code> method is the key to enabling issuer-specific claim mapping - it returns different claim types depending on which identity provider issued the token.</p><p><strong><a href="https://mangit.maninvestments.com/projects/GCP/repos/manos-positions-api/pull-requests/134#src/Man.ManOS.Positions.Api/Services/Auth/AuthenticationService.cs-129">View this change in BitBucket</a></strong></p><h4>Review Comments</h4><p><strong>✅ Positive</strong></p><ul>
+<li>Excellent use of <code>HashSet<string></code> for O(1) performance on audience/issuer lookups</li>
+<li>Proper separation of concerns with dedicated methods for each provider</li>
+<li>Good defensive coding with null checks and early returns</li>
+<li>Fixed potential deadlock issue by using <code>GetAwaiter().GetResult()</code> instead of <code>.Result</code></li>
+<li>Comprehensive name claim fallback chain for Keycloak compatibility</li>
+<li>Clean interface evolution from single to multiple issuers</li>
+<li>Good logging for diagnostics and troubleshooting</li>
+</ul><p><strong>🟡 Code Quality</strong></p><ul>
+<li>Lines 111: The fallback claim types array could be extracted as a class constant for better maintainability and to avoid "magic strings". However, these are standard OAuth2/OIDC claim names, so the inline approach is acceptable.</li>
+<li>Lines 73-78: Standard .NET claim URIs could also be constants, but they're well-established standards so inline is fine.</li>
+</ul><p><strong>🔵 Best Practices</strong></p><ul>
+<li>The issuer-specific claim mapping architecture is well-designed and extensible</li>
+<li>Graceful degradation when providers aren't configured</li>
+<li>Proper exception handling with informative error messages</li>
+</ul><p><strong>🟢 Testing</strong></p><ul>
+<li>The PR includes comprehensive unit tests in <code>AuthenticationServiceTests.cs</code> covering multi-issuer scenarios</li>
+<li>Tests verify both legacy auth service and Keycloak configuration loading</li>
+<li>Tests cover edge cases like missing configuration</li>
+</ul><p>---</p><h3>📄 <code>src/Man.ManOS.Positions.Api/Services/Auth/ConfigureJwtBearerOptions.cs</code></h3><p><strong><a href="https://mangit.maninvestments.com/projects/GCP/repos/manos-positions-api/pull-requests/134#src/Man.ManOS.Positions.Api/Services/Auth/ConfigureJwtBearerOptions.cs">View in BitBucket</a></strong></p><h4>Changes Made</h4><p><strong>Lines 2-5: Added required using statements</strong></p><pre><code class="diff"><span style="display: block;">  using System;</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ using System.Linq;</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ using System.Security.Claims;</span><span style="display: block;">  using Microsoft.AspNetCore.Authentication.JwtBearer;</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ using Microsoft.Extensions.Logging;</span><span style="display: block;">  using Microsoft.Extensions.Options;</span><span style="display: block;"></span></code></pre><p>Added necessary namespaces for new functionality (LINQ for FirstOrDefault, Claims for ClaimsIdentity, Logging for diagnostics).</p><p><strong><a href="https://mangit.maninvestments.com/projects/GCP/repos/manos-positions-api/pull-requests/134#src/Man.ManOS.Positions.Api/Services/Auth/ConfigureJwtBearerOptions.cs-2">View this change in BitBucket</a></strong></p><p><strong>Lines 11-15: Modernized constructor with primary constructor syntax and added dependencies</strong></p><pre><code class="diff"><span style="background-color: #ffebe9; color: #24292e; display: block;">- public class ConfigureJwtBearerOptions : IConfigureNamedOptions<JwtBearerOptions></span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ public class ConfigureJwtBearerOptions(IAuthenticationService authenticationService, IClaimsMapper claimsMapper, ILogger<ConfigureJwtBearerOptions> logger) : IConfigureNamedOptions<JwtBearerOptions></span><span style="display: block;">  {</span><span style="background-color: #ffebe9; color: #24292e; display: block;">-     private readonly IAuthenticationService _authenticationService;</span><span style="background-color: #ffebe9; color: #24292e; display: block;">-</span><span style="background-color: #ffebe9; color: #24292e; display: block;">-     public ConfigureJwtBearerOptions(IAuthenticationService authenticationService)</span><span style="background-color: #ffebe9; color: #24292e; display: block;">-     {</span><span style="background-color: #ffebe9; color: #24292e; display: block;">-         _authenticationService = authenticationService;</span><span style="background-color: #ffebe9; color: #24292e; display: block;">-     }</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     private readonly IAuthenticationService _authenticationService = authenticationService;</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     private readonly IClaimsMapper _claimsMapper = claimsMapper;</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     private readonly ILogger<ConfigureJwtBearerOptions> _logger = logger;</span><span style="display: block;"></span></code></pre><p>Uses C# 12 primary constructor syntax for cleaner code. Added <code>IClaimsMapper</code> and <code>ILogger</code> dependencies needed for the new functionality.</p><p><strong><a href="https://mangit.maninvestments.com/projects/GCP/repos/manos-positions-api/pull-requests/134#src/Man.ManOS.Positions.Api/Services/Auth/ConfigureJwtBearerOptions.cs-11">View this change in BitBucket</a></strong></p><p><strong>Lines 19-33: Updated token validation to support multiple issuers and audiences</strong></p><pre><code class="diff"><span style="background-color: #e6ffec; color: #24292e; display: block;">+ var issuers = _authenticationService.GetIssuers();</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ var audiences = _authenticationService.GetAudiences();</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ var signingKeys = _authenticationService.GetIssuerSigningKeys();</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+</span><span style="display: block;">  options.TokenValidationParameters = new TokenValidationParameters</span><span style="display: block;">  {</span><span style="display: block;">      ValidateIssuer = true,</span><span style="background-color: #ffebe9; color: #24292e; display: block;">-     ValidIssuer = _authenticationService.GetIssuer(),</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     ValidIssuers = issuers,</span><span style="display: block;">      ValidateAudience = true,</span><span style="background-color: #ffebe9; color: #24292e; display: block;">-     ValidAudience = _authenticationService.GetAudience(),</span><span style="background-color: #ffebe9; color: #24292e; display: block;">-     ValidateIssuerSigningKey = false,</span><span style="background-color: #ffebe9; color: #24292e; display: block;">-     IssuerSigningKey = _authenticationService.GetIssuerSigningKey(),</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     ValidAudiences = audiences,</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     ValidateIssuerSigningKey = true,</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     IssuerSigningKeys = signingKeys,</span><span style="display: block;">      ValidateLifetime = true,</span><span style="display: block;">      ClockSkew = TimeSpan.FromSeconds(15)</span><span style="display: block;">  };</span><span style="display: block;"></span></code></pre><p>Core change: switched from <code>ValidIssuer</code>/<code>ValidAudience</code> (singular) to <code>ValidIssuers</code>/<code>ValidAudiences</code> (plural). This enables the JWT handler to accept tokens from multiple identity providers. Changed <code>ValidateIssuerSigningKey</code> from <code>false</code> to <code>true</code> for better security. Changed from <code>IssuerSigningKey</code> to <code>IssuerSigningKeys</code> to support multiple signing keys.</p><p><strong><a href="https://mangit.maninvestments.com/projects/GCP/repos/manos-positions-api/pull-requests/134#src/Man.ManOS.Positions.Api/Services/Auth/ConfigureJwtBearerOptions.cs-19">View this change in BitBucket</a></strong></p><p><strong>Lines 35-41: Added OIDC metadata discovery for Keycloak</strong></p><pre><code class="diff"><span style="background-color: #e6ffec; color: #24292e; display: block;">+</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ var keycloakIssuer = issuers.FirstOrDefault(issuer =></span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     Uri.TryCreate(issuer, UriKind.Absolute, out var uri) &&</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     (uri.AbsolutePath.Contains("/auth/realms/") || uri.Host.Contains("keycloak")));</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ if (keycloakIssuer != null)</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ {</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     options.MetadataAddress = $"{keycloakIssuer}/.well-known/openid-configuration";</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ }</span><span style="display: block;"></span></code></pre><p>Detects Keycloak issuer by checking for <code>/auth/realms/</code> path or "keycloak" in hostname. Uses proper URI parsing with <code>Uri.TryCreate()</code> for robustness. Sets <code>MetadataAddress</code> to enable automatic OIDC discovery, which allows the JWT handler to automatically fetch signing keys and other metadata from Keycloak. This is why we don't need to manually add Keycloak signing keys in <code>AuthenticationService</code>.</p><p><strong><a href="https://mangit.maninvestments.com/projects/GCP/repos/manos-positions-api/pull-requests/134#src/Man.ManOS.Positions.Api/Services/Auth/ConfigureJwtBearerOptions.cs-35">View this change in BitBucket</a></strong></p><p><strong>Lines 43-59: Added JWT bearer events for claim mapping and error logging</strong></p><pre><code class="diff"><span style="background-color: #e6ffec; color: #24292e; display: block;">+</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ options.Events = new JwtBearerEvents</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ {</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     OnTokenValidated = context =></span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     {</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+         if (context.Principal?.Identity is ClaimsIdentity claimsIdentity)</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+         {</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+             _claimsMapper.MapNameClaimForIssuer(claimsIdentity, context.SecurityToken);</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+         }</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+         return System.Threading.Tasks.Task.CompletedTask;</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     },</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     OnAuthenticationFailed = context =></span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     {</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+         _logger.LogWarning(context.Exception, "JWT authentication failed");</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+         return System.Threading.Tasks.Task.CompletedTask;</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+     }</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ };</span><span style="display: block;"></span></code></pre><p>Added JWT bearer events to hook into the authentication pipeline:
+<ul>
+<li><code>OnTokenValidated</code> - After token is validated, maps name claims using the new <code>ClaimsMapper</code></li>
+<li><code>OnAuthenticationFailed</code> - Logs authentication failures with full exception details for debugging</li>
+</ul><p>This is where the issuer-specific claim mapping happens in the authentication flow.</p><p><strong><a href="https://mangit.maninvestments.com/projects/GCP/repos/manos-positions-api/pull-requests/134#src/Man.ManOS.Positions.Api/Services/Auth/ConfigureJwtBearerOptions.cs-43">View this change in BitBucket</a></strong></p><p><strong>Line 64: Added logging for scheme configuration</strong></p><pre><code class="diff"><span style="background-color: #e6ffec; color: #24292e; display: block;">+ _logger.LogInformation("Configuring JWT Bearer options for scheme: {SchemeName}", name);</span><span style="display: block;">  Configure(options);</span><span style="display: block;"></span></code></pre><p>Helpful diagnostic logging to track when JWT options are configured.</p><p><strong><a href="https://mangit.maninvestments.com/projects/GCP/repos/manos-positions-api/pull-requests/134#src/Man.ManOS.Positions.Api/Services/Auth/ConfigureJwtBearerOptions.cs-64">View this change in BitBucket</a></strong></p><h4>Review Comments</h4><p><strong>✅ Positive</strong></p><ul>
+<li>Clean use of primary constructor syntax (C# 12 feature)</li>
+<li>Proper URI validation using <code>Uri.TryCreate()</code> instead of fragile string matching</li>
+<li>OIDC metadata discovery is the correct approach for Keycloak integration</li>
+<li>Good separation of concerns - claim mapping delegated to dedicated <code>ClaimsMapper</code> class</li>
+<li>Proper error logging with full exception details</li>
+<li>Changed <code>ValidateIssuerSigningKey</code> to <code>true</code> for better security</li>
+</ul><p><strong>🟡 Code Quality</strong></p><ul>
+<li>Line 37: Keycloak detection logic using path/host contains is reasonable but could be made configurable via a setting like <code>Authentication:OAuth:Provider: "Keycloak"</code> for explicit control. However, the current approach works well and auto-detects Keycloak instances.</li>
+</ul><p><strong>🔵 Best Practices</strong></p><ul>
+<li>Using OIDC discovery is the standard approach for OAuth2/OIDC integration</li>
+<li>Event-based claim mapping is the correct extensibility point</li>
+<li>Proper async/await patterns (returning <code>Task.CompletedTask</code> for synchronous event handlers)</li>
+</ul><p><strong>🟢 Testing</strong></p><ul>
+<li>The PR includes unit tests in <code>ConfigureJwtBearerOptionsTests.cs</code> covering the configuration logic</li>
+<li>Tests verify multi-issuer setup and Keycloak detection</li>
+</ul><p>---</p><h3>📄 <code>src/Man.ManOS.Positions.Api/Services/Auth/ClaimsMapper.cs</code> (NEW FILE)</h3><p><strong><a href="https://mangit.maninvestments.com/projects/GCP/repos/manos-positions-api/pull-requests/134#src/Man.ManOS.Positions.Api/Services/Auth/ClaimsMapper.cs">View in BitBucket</a></strong></p><h4>Changes Made</h4><p>This is a new file implementing issuer-specific claim mapping logic.</p><p><strong>Lines 11-43: Core claim mapping logic</strong></p><pre><code class="csharp">public void MapNameClaimForIssuer(ClaimsIdentity claimsIdentity, SecurityToken securityToken)
+{
+    if (claimsIdentity == null || securityToken == null)
+    {
+        return;
+    }</p><p>    // If already has a name, do nothing
+    if (!string.IsNullOrEmpty(claimsIdentity.Name))
+    {
+        return;
+    }</p><p>    // Resolve issuer from token (prefer JWT Issuer, fallback to 'iss' claim)
+    var tokenIssuer = securityToken is JwtSecurityToken jwtToken
+        ? jwtToken.Issuer
+        : claimsIdentity.FindFirst("iss")?.Value;</p><p>    foreach (var nameClaimType in _authenticationService.GetNameClaimTypesForIssuer(tokenIssuer))
+    {
+        var nameClaim = claimsIdentity.FindFirst(nameClaimType);
+        if (nameClaim?.Value != null)
+        {
+            var processedUsername = EnsureDomainPrefix(nameClaim.Value);
+            claimsIdentity.AddClaim(new Claim(
+                ClaimTypes.Name,
+                processedUsername,
+                nameClaim.ValueType,
+                nameClaim.Issuer));
+            return;
+        }
+    }
+}
+</code></pre><p>This method:
+1. Guards against null inputs
+2. Skips if name claim already exists (idempotent)
+3. Detects the issuer from the token
+4. Gets issuer-specific name claim types from <code>AuthenticationService</code>
+5. Searches for the first matching name claim
+6. Ensures domain prefix is added
+7. Adds standardized <code>ClaimTypes.Name</code> claim</p><p>This is the key logic that enables different identity providers to use different claim names while presenting a consistent interface to the application.</p><p><strong><a href="https://mangit.maninvestments.com/projects/GCP/repos/manos-positions-api/pull-requests/134#src/Man.ManOS.Positions.Api/Services/Auth/ClaimsMapper.cs-11">View this change in BitBucket</a></strong></p><p><strong>Lines 45-54: Domain prefix logic</strong></p><pre><code class="csharp">public static string EnsureDomainPrefix(string username)
+{
+    if (string.IsNullOrEmpty(username) || username.Contains('\\'))
+    {
+        return username;
+    }</p><p>    return "MANINVESTMENTS\\" + username;
+}
+</code></pre><p>Ensures all usernames have the <code>MANINVESTMENTS\</code> domain prefix for consistency with legacy systems. Checks for existing backslash to avoid double-prefixing. This handles cases where Keycloak tokens might have email-format usernames (<code>user@domain.com</code>) and converts them to Windows domain format (<code>MANINVESTMENTS\user@domain.com</code>).</p><p><strong><a href="https://mangit.maninvestments.com/projects/GCP/repos/manos-positions-api/pull-requests/134#src/Man.ManOS.Positions.Api/Services/Auth/ClaimsMapper.cs-45">View this change in BitBucket</a></strong></p><h4>Review Comments</h4><p><strong>✅ Positive</strong></p><ul>
+<li>Clean, focused single responsibility class</li>
+<li>Good defensive coding with null checks and idempotency</li>
+<li>Proper issuer detection with fallback</li>
+<li>Domain prefixing ensures consistency across identity providers</li>
+<li>Uses standard <code>ClaimTypes.Name</code> for interoperability</li>
+</ul><p><strong>🟡 Code Quality</strong></p><ul>
+<li>Line 52: The domain prefix <code>"MANINVESTMENTS\\"</code> is hardcoded. This is acceptable for the current use case (legacy compatibility), but could be made configurable in the future if needed for other environments. For now, keeping it hardcoded is fine as noted in PR discussions.</li>
+<li>Line 47: Domain detection only checks for backslash. This is intentional for legacy token compatibility (detecting <code>DOMAIN\username</code> format). The <code>@</code> symbol is intentionally NOT checked because email-format usernames need to be converted to domain prefix format.</li>
+</ul><p><strong>🔵 Best Practices</strong></p><ul>
+<li>Static helper method <code>EnsureDomainPrefix</code> is testable in isolation</li>
+<li>Issuer-specific logic is properly delegated to <code>AuthenticationService</code></li>
+<li>Early returns for clarity</li>
+</ul><p><strong>🟢 Testing</strong></p><ul>
+<li>The PR includes comprehensive unit tests in <code>ClaimsMapperTests.cs</code></li>
+<li>Tests cover different claim types, issuer detection, domain prefixing logic</li>
+</ul><p>---</p><h3>📄 <code>src/Man.ManOS.Positions.Api/Services/Auth/IAuthenticationService.cs</code></h3><p><strong><a href="https://mangit.maninvestments.com/projects/GCP/repos/manos-positions-api/pull-requests/134#src/Man.ManOS.Positions.Api/Services/Auth/IAuthenticationService.cs">View in BitBucket</a></strong></p><h4>Changes Made</h4><p>Interface updated to support multi-issuer authentication:</p><pre><code class="diff"><span style="background-color: #ffebe9; color: #24292e; display: block;">- string GetAudience();</span><span style="background-color: #ffebe9; color: #24292e; display: block;">- string GetIssuer();</span><span style="background-color: #ffebe9; color: #24292e; display: block;">- SecurityKey GetIssuerSigningKey();</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ IEnumerable<string> GetAudiences();</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ IEnumerable<string> GetIssuers();</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ IEnumerable<SecurityKey> GetIssuerSigningKeys();</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ IEnumerable<string> GetNameClaimTypes();</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ IEnumerable<string> GetNameClaimTypesForIssuer(string issuer);</span><span style="display: block;"></span></code></pre><p>Clean interface evolution from single to multiple issuers. Added methods for name claim type resolution.</p><p><strong><a href="https://mangit.maninvestments.com/projects/GCP/repos/manos-positions-api/pull-requests/134#src/Man.ManOS.Positions.Api/Services/Auth/IAuthenticationService.cs">View this change in BitBucket</a></strong></p><h4>Review Comments</h4><p><strong>✅ Positive</strong></p><ul>
+<li>Clear interface that supports the new multi-issuer architecture</li>
+<li>Backward-compatible evolution (callers can still use <code>.First()</code> if they need a single value)</li>
+<li>New methods enable issuer-specific behavior</li>
+</ul><p>---</p><h3>📄 <code>src/Man.ManOS.Positions.Api/Services/Auth/IClaimsMapper.cs</code> (NEW FILE)</h3><p><strong><a href="https://mangit.maninvestments.com/projects/GCP/repos/manos-positions-api/pull-requests/134#src/Man.ManOS.Positions.Api/Services/Auth/IClaimsMapper.cs">View in BitBucket</a></strong></p><h4>Changes Made</h4><p>New interface for claim mapping abstraction:</p><pre><code class="csharp">public interface IClaimsMapper
+{
+    void MapNameClaimForIssuer(ClaimsIdentity claimsIdentity, SecurityToken securityToken);
+}
+</code></pre><p>Simple, focused interface for the single responsibility of mapping name claims.</p><p><strong><a href="https://mangit.maninvestments.com/projects/GCP/repos/manos-positions-api/pull-requests/134#src/Man.ManOS.Positions.Api/Services/Auth/IClaimsMapper.cs">View this change in BitBucket</a></strong></p><h4>Review Comments</h4><p><strong>✅ Positive</strong></p><ul>
+<li>Clean abstraction that's easy to test and mock</li>
+<li>Single method with clear purpose</li>
+</ul><p>---</p><h3>📄 <code>src/Man.ManOS.Positions.Api/Startup.cs</code></h3><p><strong><a href="https://mangit.maninvestments.com/projects/GCP/repos/manos-positions-api/pull-requests/134#src/Man.ManOS.Positions.Api/Startup.cs">View in BitBucket</a></strong></p><h4>Changes Made</h4><p><strong>Line 204: Registered new ClaimsMapper service</strong></p><pre><code class="diff"><span style="display: block;">  services.AddSingleton<IAuthenticationService, AuthenticationService>();</span><span style="background-color: #e6ffec; color: #24292e; display: block;">+ services.AddSingleton<IClaimsMapper, ClaimsMapper>();</span><span style="display: block;"></span><span style="display: block;">  services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer();</span><span style="display: block;"></span></code></pre><p>Added DI registration for the new <code>IClaimsMapper</code> service.</p><p><strong><a href="https://mangit.maninvestments.com/projects/GCP/repos/manos-positions-api/pull-requests/134#src/Man.ManOS.Positions.Api/Startup.cs-204">View this change in BitBucket</a></strong></p><h4>Review Comments</h4><p><strong>✅ Positive</strong></p><ul>
+<li>Minimal change to wire up new service</li>
+<li>Singleton lifetime is appropriate for stateless claim mapping</li>
+</ul><p>---</p><h3>📄 <code>src/Man.ManOS.Positions.Api/appsettings.json</code></h3><p><strong><a href="https://mangit.maninvestments.com/projects/GCP/repos/manos-positions-api/pull-requests/134#src/Man.ManOS.Positions.Api/appsettings.json">View in BitBucket</a></strong></p><h4>Changes Made</h4><p>Added new OAuth configuration section:</p><pre><code class="json">"Authentication": {
+  "AuthenticationMode": "None",
+  "OAuth": {
+    "Authority": "https://keycloak-lon.prod.m/auth/realms/master",
+    "Audience": "tpc-manos-positionsuiwidget-dev",
+    "DefaultNameClaim": "preferred_username"
+  }
+}
+</code></pre><p>Configuration for Keycloak integration with standard OAuth2/OIDC settings.</p><p><strong><a href="https://mangit.maninvestments.com/projects/GCP/repos/manos-positions-api/pull-requests/134#src/Man.ManOS.Positions.Api/appsettings.json">View this change in BitBucket</a></strong></p><h4>Review Comments</h4><p><strong>🔴 Critical Issues</strong></p><ul>
+<li><strong>Line: OAuth.Authority</strong> - Using the <code>master</code> realm in production configuration is a security concern. The master realm should typically be reserved for administrative purposes only. Consider using a dedicated application realm instead. This should be addressed before production deployment.</li>
+</ul><p><strong>🟡 Code Quality</strong></p><ul>
+<li><strong>Line: OAuth.Audience</strong> - The audience value contains 'dev' but the Authority points to 'prod.m'. Ensure the audience configuration matches the intended environment to avoid authentication issues. This appears to be a configuration mismatch that should be verified.</li>
+</ul><p>---</p><h3>📄 <code>docs/faq.md</code></h3><p><strong><a href="https://mangit.maninvestments.com/projects/GCP/repos/manos-positions-api/pull-requests/134#docs/faq.md">View in BitBucket</a></strong></p><h4>Changes Made</h4><p>Added documentation for Keycloak authentication configuration.</p><h4>Review Comments</h4><p><strong>✅ Positive</strong></p><ul>
+<li>Good documentation of the new feature</li>
+<li>Clear configuration examples</li>
+</ul><p><strong>🟡 Code Quality</strong></p><ul>
+<li>The example uses <code>keycloak.example.com</code> which could be confusing in production documentation. Consider using the actual Keycloak instance URL or adding a note that this should be replaced.</li>
+</ul><p>---</p><h3>📄 <code>docs/positions-ui-test.bash</code> (NEW FILE)</h3><p><strong><a href="https://mangit.maninvestments.com/projects/GCP/repos/manos-positions-api/pull-requests/134#docs/positions-ui-test.bash">View in BitBucket</a></strong></p><h4>Changes Made</h4><p>Added helper test script for API authentication testing.</p><h4>Review Comments</h4><p><strong>🟡 Code Quality</strong></p><ul>
+<li>This appears to be a test/development helper script. As noted in PR comments, consider whether this should be committed or if it's just for AI/development use. If it's valuable for API consumers, a Python equivalent might have more value as suggested in comments.</li>
+</ul><p>---</p><h3>📄 <code>changelog/MANOMS-9556.md</code> (NEW FILE)</h3><p><strong><a href="https://mangit.maninvestments.com/projects/GCP/repos/manos-positions-api/pull-requests/134#changelog/MANOMS-9556.md">View in BitBucket</a></strong></p><h4>Changes Made</h4><p>Added changelog entry documenting the feature.</p><h4>Review Comments</h4><p><strong>✅ Positive</strong></p><ul>
+<li>Good practice to maintain changelog</li>
+<li>Clear description of changes</li>
+</ul><p>---</p><h3>📄 <code>reflections/MANOMS-9556.md</code> (NEW FILE)</h3><p><strong><a href="https://mangit.maninvestments.com/projects/GCP/repos/manos-positions-api/pull-requests/134#reflections/MANOMS-9556.md">View in BitBucket</a></strong></p><h4>Changes Made</h4><p>Added development reflections and design decisions.</p><h4>Review Comments</h4><p><strong>✅ Positive</strong></p><ul>
+<li>Excellent practice to document design decisions and rationale</li>
+<li>Helps future maintainers understand the "why" behind implementation choices</li>
+</ul><p>---</p><h3>📄 Test Files (NEW FILES)</h3><p><strong><a href="https://mangit.maninvestments.com/projects/GCP/repos/manos-positions-api/pull-requests/134#tests/Man.ManOS.Positions.Api.Tests/Services/Auth/">View in BitBucket</a></strong></p><ul>
+<li><code>AuthenticationServiceTests.cs</code></li>
+<li><code>ClaimsMapperTests.cs</code></li>
+<li><code>ConfigureJwtBearerOptionsTests.cs</code></li>
+</ul><h4>Review Comments</h4><p><strong>✅ Positive</strong></p><ul>
+<li>Comprehensive test coverage for all new authentication components</li>
+<li>Tests cover multi-issuer scenarios, claim mapping, and edge cases</li>
+<li>Good separation of unit tests by component</li>
+</ul><p>---</p><h2>Overall Assessment</h2><h3>Summary of Critical Issues</h3><p><strong>🔴 Configuration Issue - Production Realm</strong></p><ul>
+<li><strong>File</strong>: <code>src/Man.ManOS.Positions.Api/appsettings.json</code></li>
+<li><strong>Issue</strong>: Using Keycloak <code>master</code> realm in production configuration</li>
+<li><strong>Impact</strong>: Security concern - master realm should be for admin purposes only</li>
+<li><strong>Recommendation</strong>: Use a dedicated application realm for production</li>
+<li><strong>Priority</strong>: Should be addressed before production deployment</li>
+</ul><p><strong>🟡 Configuration Mismatch</strong></p><ul>
+<li><strong>File</strong>: <code>src/Man.ManOS.Positions.Api/appsettings.json</code></li>
+<li><strong>Issue</strong>: Audience contains 'dev' but Authority points to 'prod.m'</li>
+<li><strong>Impact</strong>: Potential authentication failures if environment mismatch</li>
+<li><strong>Recommendation</strong>: Verify audience matches intended environment</li>
+<li><strong>Priority</strong>: Should be verified and corrected</li>
+</ul><h3>Summary of Suggestions</h3><p>1. <strong>Keycloak detection logic</strong> (ConfigureJwtBearerOptions.cs:37) - Consider making provider type explicitly configurable rather than auto-detecting via URL patterns. Current approach works but explicit configuration would be more maintainable.</p><p>2. <strong>Hardcoded domain prefix</strong> (ClaimsMapper.cs:52) - The <code>MANINVESTMENTS\</code> prefix is hardcoded. Consider making configurable for future flexibility, though current approach is acceptable for legacy compatibility.</p><p>3. <strong>Test script</strong> (docs/positions-ui-test.bash) - Clarify whether this should be committed or if it's just for development. Consider Python version for broader consumer use.</p><p>4. <strong>Documentation examples</strong> (docs/faq.md) - Use actual Keycloak URLs or add notes that examples should be replaced.</p><h3>What's Done Well</h3><p>1. <strong>Excellent Architecture</strong> - Clean separation of concerns with dedicated classes for authentication service, JWT configuration, and claims mapping</p><p>2. <strong>Multi-Issuer Support</strong> - Well-designed system supporting multiple identity providers with issuer-specific claim mapping</p><p>3. <strong>Backward Compatibility</strong> - Existing auth service continues to work unchanged while adding Keycloak support</p><p>4. <strong>Performance Optimizations</strong> - Use of <code>HashSet<string></code> for O(1) lookups, proper use of <code>GetAwaiter().GetResult()</code> to avoid deadlocks</p><p>5. <strong>Security Improvements</strong> - Changed <code>ValidateIssuerSigningKey</code> to <code>true</code>, proper OIDC discovery implementation</p><p>6. <strong>Comprehensive Testing</strong> - Unit tests cover all new components and edge cases</p><p>7. <strong>Code Quality</strong> - Clean, readable code following C# best practices, good use of modern language features (primary constructors)</p><p>8. <strong>Documentation</strong> - Good changelog, reflections, and FAQ documentation</p><p>9. <strong>Error Handling</strong> - Proper exception handling with informative error messages and logging</p><p>10. <strong>Extensibility</strong> - Design easily supports adding more identity providers in the future</p><h3>Questions for Author</h3><p>1. Is the <code>master</code> realm usage in appsettings.json intentional for development only, or should this be changed before production deployment?</p><p>2. Should the audience <code>tpc-manos-positionsuiwidget-dev</code> be environment-specific (dev/prod)?</p><p>3. Is the <code>positions-ui-test.bash</code> script intended for production documentation or just development use?</p><h3>Testing Recommendations</h3><p>Based on entry points, tests should cover:</p><ul>
+<li>✅ <strong>Token validation with legacy auth service</strong> - Covered in tests</li>
+<li>✅ <strong>Token validation with Keycloak</strong> - Covered in tests</li>
+<li>✅ <strong>Claim mapping for different issuers</strong> - Covered in tests</li>
+<li>✅ <strong>Domain prefix handling</strong> - Covered in tests</li>
+<li>✅ <strong>Multi-issuer configuration</strong> - Covered in tests</li>
+<li>🔲 <strong>Integration test</strong>: Full authentication flow from GraphQL endpoint through to authorized query execution</li>
+<li>🔲 <strong>Integration test</strong>: Verify both legacy and Keycloak tokens work with actual GraphQL queries</li>
+<li>🔲 <strong>Integration test</strong>: Verify authorization policies work correctly with claims from both providers</li>
+<li>🔲 <strong>Manual test</strong>: Test with actual Keycloak instance in dev/UAT environment</li>
+<li>🔲 <strong>Manual test</strong>: Verify existing clients with legacy tokens continue to work</li>
+</ul><h3>Final Recommendation</h3><p><strong>APPROVE ✅ (with minor configuration corrections)</strong></p><p>This is a well-designed, thoroughly tested implementation of multi-issuer JWT authentication. The code quality is excellent, the architecture is clean and extensible, and backward compatibility is maintained. The only concerns are:</p><p>1. Configuration issues (master realm, environment mismatch) that should be corrected before production
+2. Minor suggestions around configurability that are nice-to-have but not blocking</p><p><strong>Strengths</strong>:
+<ul>
+<li>Excellent architecture and separation of concerns</li>
+<li>Comprehensive test coverage</li>
+<li>Proper security practices</li>
+<li>Clean, maintainable code</li>
+<li>Good documentation</li>
+</ul><p><strong>Must Fix Before Production</strong>:
+<ul>
+<li>Change from <code>master</code> realm to dedicated application realm</li>
+<li>Verify/correct audience configuration for environment</li>
+</ul><p><strong>Nice to Have</strong>:
+<ul>
+<li>Make provider detection more explicit via configuration</li>
+<li>Consider making domain prefix configurable</li>
+<li>Clarify status of test script</li>
+</ul><p>The implementation demonstrates strong engineering practices and is ready for deployment once the configuration issues are addressed.</p><p>---</p><h2>Metadata</h2><p><strong>Review Statistics</strong>:
+<ul>
+<li>Files reviewed: 14</li>
+<li>New files: 7</li>
+<li>Modified files: 7</li>
+<li>Lines added: ~800</li>
+<li>Lines removed: ~100</li>
+<li>Test files added: 3</li>
+</ul><p><strong>Review Duration</strong>: Automated review completed in real-time</p><p><strong>Reviewer</strong>: Claude Code (Automated PR Review System)
+</p>
+</body>
+</html>

@@ -32,7 +32,7 @@ def main(ctx: click.Context, log_level: str) -> None:
 @main.command()
 @click.option(
     "--system",
-    type=click.Choice(["thk", "man-oms", "panorama", "all"]),
+    type=click.Choice(["thk", "man-oms", "GCP", "all"]),
     default="all",
     help="System to sync (default: all)",
 )
@@ -63,7 +63,7 @@ def sync(ctx: click.Context, system: str, branch: Optional[str]) -> None:
 @main.command()
 @click.option(
     "--system",
-    type=click.Choice(["thk", "man-oms", "panorama", "all"]),
+    type=click.Choice(["thk", "man-oms", "GCP", "all"]),
     default="all",
     help="System to update (default: all)",
 )
@@ -94,7 +94,7 @@ def update(ctx: click.Context, system: str, branch: Optional[str]) -> None:
 @main.command()
 @click.option(
     "--system",
-    type=click.Choice(["thk", "man-oms", "panorama", "all"]),
+    type=click.Choice(["thk", "man-oms", "GCP", "all"]),
     default="all",
     help="System to clone (default: all)",
 )
@@ -125,35 +125,60 @@ def clone(ctx: click.Context, system: str, branch: str) -> None:
 @main.command()
 @click.option(
     "--system",
-    type=click.Choice(["thk", "man-oms", "panorama"]),
-    required=True,
-    help="System to check status",
+    type=click.Choice(["thk", "man-oms", "GCP", "all"]),
+    default="all",
+    help="System to check status (default: all)",
 )
 @click.pass_context
 def status(ctx: click.Context, system: str) -> None:
-    """Show status of repositories for a system."""
+    """Show status of repositories for a system or all systems."""
     sync_manager: RepositorySync = ctx.obj["sync"]
+    config: PKMConfig = ctx.obj["config"]
 
     try:
-        statuses = sync_manager.get_repository_status(system)
+        if system == "all":
+            systems = config.list_systems()
+            for sys_name in systems:
+                statuses = sync_manager.get_repository_status(sys_name)
 
-        table = Table(title=f"Repository Status - {system}")
-        table.add_column("Repository", style="cyan")
-        table.add_column("Exists", style="green")
-        table.add_column("Branch", style="yellow")
-        table.add_column("Dirty", style="red")
-        table.add_column("Commit", style="blue")
+                table = Table(title=f"Repository Status - {sys_name}")
+                table.add_column("Repository", style="cyan")
+                table.add_column("Exists", style="green")
+                table.add_column("Branch", style="yellow")
+                table.add_column("Dirty", style="red")
+                table.add_column("Commit", style="blue")
 
-        for status_info in statuses:
-            table.add_row(
-                status_info["name"],
-                "" if status_info["exists"] else "",
-                status_info.get("branch", "-"),
-                "" if status_info.get("dirty") else "",
-                status_info.get("commit", "-"),
-            )
+                for status_info in statuses:
+                    table.add_row(
+                        status_info["name"],
+                        "" if status_info["exists"] else "",
+                        status_info.get("branch", "-"),
+                        "" if status_info.get("dirty") else "",
+                        status_info.get("commit", "-"),
+                    )
 
-        console.print(table)
+                console.print(table)
+                console.print()  # Add spacing between systems
+        else:
+            statuses = sync_manager.get_repository_status(system)
+
+            table = Table(title=f"Repository Status - {system}")
+            table.add_column("Repository", style="cyan")
+            table.add_column("Exists", style="green")
+            table.add_column("Branch", style="yellow")
+            table.add_column("Dirty", style="red")
+            table.add_column("Commit", style="blue")
+
+            for status_info in statuses:
+                table.add_row(
+                    status_info["name"],
+                    "" if status_info["exists"] else "",
+                    status_info.get("branch", "-"),
+                    "" if status_info.get("dirty") else "",
+                    status_info.get("commit", "-"),
+                )
+
+            console.print(table)
 
     except RepositorySyncError as e:
         console.print(f"[red]Status check failed: {e}[/red]")
@@ -163,7 +188,7 @@ def status(ctx: click.Context, system: str) -> None:
 @main.command()
 @click.option(
     "--system",
-    type=click.Choice(["thk", "man-oms", "panorama", "all"]),
+    type=click.Choice(["thk", "man-oms", "GCP", "all"]),
     default="all",
     help="System to show branches for (default: all)",
 )
@@ -246,7 +271,7 @@ def list_systems(ctx: click.Context) -> None:
 @main.command()
 @click.option(
     "--system",
-    type=click.Choice(["thk", "man-oms", "panorama"]),
+    type=click.Choice(["thk", "man-oms", "GCP"]),
     required=True,
     help="System to list repositories",
 )

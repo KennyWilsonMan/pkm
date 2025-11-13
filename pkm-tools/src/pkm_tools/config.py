@@ -34,7 +34,7 @@ class PKMConfig(BaseSettings):
         """Get directory for a specific system.
 
         Args:
-            system: System name (thk, man-oms, panorama)
+            system: System name (thk, man-oms, GCP)
 
         Returns:
             Path to system directory
@@ -48,7 +48,7 @@ class PKMConfig(BaseSettings):
         """Get repository-list.txt file for a system.
 
         Args:
-            system: System name (thk, man-oms, panorama)
+            system: System name (thk, man-oms, GCP)
 
         Returns:
             Path to repository-list.txt file
@@ -62,7 +62,7 @@ class PKMConfig(BaseSettings):
         """Get service-repositories directory for a system.
 
         Args:
-            system: System name (thk, man-oms, panorama)
+            system: System name (thk, man-oms, GCP)
 
         Returns:
             Path to service-repositories directory
