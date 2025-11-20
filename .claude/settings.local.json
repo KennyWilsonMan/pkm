@@ -33,7 +33,8 @@
       "Bash(pkm branches --system man-oms)",
       "Bash(python -c \"import requests; print(requests.__version__)\")",
       "Bash(pip install --timeout 60 --retries 5 requests)",
-      "Bash(pkm checkout --help)"
+      "Bash(pkm checkout --help)",
+      "WebFetch(domain:www.spglobal.com)"
     ],
     "deny": [],
     "ask": []
