@@ -1,5 +1,7 @@
 # Rosetta for CDS
 
+[← Back to OMS CDS Notes](./README.md)
+
 If we want to look at CDS trades in Rosetta we need to first open the trade overviews screen and filter it as follows. Make sure the ** Trading Source** is *Charles River* for CDS trades. 
 
 ![Rosetta Trade Overview](./images/rosetta-trade-overview.png)
