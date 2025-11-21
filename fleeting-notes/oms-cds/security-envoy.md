@@ -36,9 +36,22 @@ https://rosa-securityenvoy-n1-dev.maninvestments.ad.man.com:8374/swagger/index.h
 
 
 ## OMS DB
+```sql
+select * from oms.Inventory.SECURITY_FIXED_INCOME sfi
+inner join oms.Inventory.SECURITY s on sfi.REFERENCE_OBLIGATION_SECURITY_ID = s.SECURITY_ID
+inner join oms.Inventory.SECURITY_FIXED_INCOME rsfi on sfi.REFERENCE_OBLIGATION_SECURITY_ID = rsfi.SECURITY_ID
+inner join oms.inventory.security_class sc on s.security_class_id = sc.SECURITY_CLASS_ID 
+where s.security_id = 12326414
+--where sc.PARENT_SECURITY_CLASS_ID = 335 and rsfi.CDS_INDEX_PERIOD is not null
+
+```
+
 
 ### CDS on Single Name
-
+```sql
+select * from oms.Inventory.SECURITY_FIXED_INCOME sfi
+where RED_ISSUER is not null
+```
 
 
 
