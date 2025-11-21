@@ -67,7 +67,7 @@ st.sidebar.markdown("---")
 st.sidebar.header("📋 Analysis Mode")
 analysis_mode = st.sidebar.radio(
     "Choose Analysis",
-    ["Book CDS Overview", "Specific Position Lookup"],
+    ["Book CDS Overview", "Specific Position Lookup", "CDS Creator"],
     index=0,
     help="Select the type of analysis you want to perform"
 )
@@ -85,6 +85,113 @@ if analysis_mode == "Book CDS Overview":
         st.header("📚 Books with CDS Positions")
     with col2:
         st.markdown(f"<div style='text-align: right; padding: 1rem;'><span style='background-color: #4CAF50; color: white; padding: 0.5rem 1rem; border-radius: 0.25rem; font-weight: bold;'>{env.upper()}</span></div>", unsafe_allow_html=True)
+
+    # CDS System Overview
+    st.markdown("### 📊 CDS System Overview")
+
+    col1, col2 = st.columns(2)
+
+    # Currency Information
+    with col1:
+        st.markdown("#### 💱 CDS Currencies")
+        try:
+            query_currencies = """
+            SELECT DISTINCT
+                C.ISO_CODE
+            FROM
+                Inventory.SECURITY S
+                INNER JOIN Inventory.CURRENCY C ON S.CURRENCY_ID = C.CURRENCY_ID
+            WHERE
+                S.SECURITY_CLASS_ID = 29  -- Credit Default Swap
+                AND S.END_DT > GETDATE()
+                AND C.END_DT > GETDATE()
+            ORDER BY
+                C.ISO_CODE
+            """
+            df_currencies = execute_query(env, query_currencies)
+
+            if not df_currencies.empty:
+                currencies_list = df_currencies['ISO_CODE'].tolist()
+                currencies_str = ", ".join(currencies_list)
+
+                st.metric("Total Currencies", len(currencies_list))
+                st.info(f"**Currencies:** {currencies_str}")
+
+            # Show SQL query in expander
+            with st.expander("🔍 View SQL Query", expanded=False):
+                st.code(query_currencies, language="sql")
+        except Exception as e:
+            st.warning(f"⚠️ Unable to load currency information: {str(e)}")
+
+    # Reference Entity Information
+    with col2:
+        st.markdown("#### 🏢 Reference Entities")
+        try:
+            query_ref_entities = """
+            SELECT
+                COUNT(DISTINCT I.ISSUER_ID) AS Total_Reference_Entities,
+                COUNT(DISTINCT S.SECURITY_ID) AS Total_CDS_Securities
+            FROM
+                Inventory.SECURITY S
+                INNER JOIN Inventory.ISSUER I ON S.ISSUER_ID = I.ISSUER_ID
+            WHERE
+                S.SECURITY_CLASS_ID = 29  -- Credit Default Swap
+                AND S.END_DT > GETDATE()
+                AND I.END_DT > GETDATE()
+            """
+            df_ref_entities = execute_query(env, query_ref_entities)
+
+            if not df_ref_entities.empty:
+                total_entities = int(df_ref_entities['Total_Reference_Entities'].iloc[0])
+                total_securities = int(df_ref_entities['Total_CDS_Securities'].iloc[0])
+
+                st.metric("Total Reference Entities", f"{total_entities:,}")
+                st.info(f"**CDS Securities:** {total_securities:,}")
+
+            # Show SQL query in expander
+            with st.expander("🔍 View SQL Query", expanded=False):
+                st.code(query_ref_entities, language="sql")
+        except Exception as e:
+            st.warning(f"⚠️ Unable to load reference entity information: {str(e)}")
+
+    # Top Reference Entities by CDS count
+    st.markdown("#### 🔝 Top 10 Reference Entities by CDS Count")
+    try:
+        query_top_entities = """
+        SELECT TOP 10
+            I.ISSUER_NAME,
+            COUNT(DISTINCT S.SECURITY_ID) AS CDS_Count
+        FROM
+            Inventory.SECURITY S
+            INNER JOIN Inventory.ISSUER I ON S.ISSUER_ID = I.ISSUER_ID
+        WHERE
+            S.SECURITY_CLASS_ID = 29  -- Credit Default Swap
+            AND S.END_DT > GETDATE()
+            AND I.END_DT > GETDATE()
+        GROUP BY
+            I.ISSUER_NAME
+        ORDER BY
+            CDS_Count DESC
+        """
+        df_top_entities = execute_query(env, query_top_entities)
+
+        if not df_top_entities.empty:
+            st.dataframe(
+                df_top_entities.style.format({
+                    'CDS_Count': '{:,}'
+                }),
+                use_container_width=True,
+                hide_index=True,
+                height=400
+            )
+
+        # Show SQL query in expander
+        with st.expander("🔍 View SQL Query", expanded=False):
+            st.code(query_top_entities, language="sql")
+    except Exception as e:
+        st.warning(f"⚠️ Unable to load top reference entities: {str(e)}")
+
+    st.markdown("---")
 
     # Filters section
     st.sidebar.markdown("---")
@@ -820,7 +927,7 @@ if analysis_mode == "Book CDS Overview":
         import traceback
         st.code(traceback.format_exc())
 
-else:  # Specific Position Lookup mode
+elif analysis_mode == "Specific Position Lookup":
     st.info("💡 **Direct Position Lookup Mode** - Enter Security ID and Book ID to query specific CDS position details")
 
     # Get the values from sidebar
@@ -1273,6 +1380,21 @@ else:  # Specific Position Lookup mode
             with st.expander("🔧 Error Details"):
                 import traceback
                 st.code(traceback.format_exc())
+
+elif analysis_mode == "CDS Creator":
+    # Header with environment badge
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.header("🛠️ CDS Creator")
+    with col2:
+        st.markdown(f"<div style='text-align: right; padding: 1rem;'><span style='background-color: #4CAF50; color: white; padding: 0.5rem 1rem; border-radius: 0.25rem; font-weight: bold;'>{env.upper()}</span></div>", unsafe_allow_html=True)
+
+    st.info("💡 **CDS Creator Tool** - Under construction")
+    st.markdown("---")
+
+    # Empty space for future development
+    st.markdown("### Coming Soon")
+    st.write("This section will contain tools for creating new CDS positions in the OMS system.")
 
 # Footer
 st.markdown("---")
