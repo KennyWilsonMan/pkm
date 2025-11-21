@@ -1,5 +1,7 @@
 # Credit Default Swap
 
+[← Back to OMS CDS Notes](./README.md)
+
 CDS pays (1-R) * Notional on default where R is the recovery rate as a % of notional. The purchases makes regular payment in exchange for the insurance. The payments made by the purchaser to the seller are known as the **spread**
 
 A CDS specifies

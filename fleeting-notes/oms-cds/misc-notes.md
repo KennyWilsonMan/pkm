@@ -15,3 +15,12 @@ We can reduce or unwind existing position in four ways; two for Bilareral OTC an
 * **OFFSET** Opposing trade but not against original security. It creates a new security 
 * **CLOSE OUT** Unwinding the original position in the same security
 
+Ref ENTITY 
+
+red cODE 
+
+REF OB IS BOND FOR SINGLE 
+
+sINLGE NAME REF ENTITY AND THEN REF OBLIGATION IT HAS THE RED CODE ATTACHED. 
+
+Reference Entity 

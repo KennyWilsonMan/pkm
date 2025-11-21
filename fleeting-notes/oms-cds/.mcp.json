@@ -1,0 +1,38 @@
+{
+  "mcpServers": {
+    "bitbucket": {
+      "type": "http",
+      "url": "https://oms-bb-mcp.d.res.m/mcp",
+      "headers": {
+        "Authorization": "Bearer ${BITBUCKET_TOKEN}"
+      },
+      "autoApprove": [
+        "bitbucket_list_projects",
+        "bitbucket_list_repositories",
+        "bitbucket_list_repository_branches",
+        "bitbucket_get_file_content",
+        "bitbucket_get_pr_diff",
+        "bitbucket_get_pr_commits",
+        "bitbucket_get_pull_request_changes",
+        "bitbucket_get_commit_changes",
+        "bitbucket_get_dashboard_pull_requests",
+        "bitbucket_get_build_status_stats",
+        "bitbucket_get_jira_issues_for_pr",
+        "bitbucket_get_commits",
+        "bitbucket_browse_files",
+        "bitbucket_get_pull_requests",
+        "bitbucket_get_pull_requests_enhanced",
+        "bitbucket_get_pr_activities",
+        "bitbucket_get_comment_replies",
+        "bitbucket_get_comment_thread"
+      ]
+    },
+    "sql-server": {
+      "type": "stdio",
+      "command": "/users/is/kewilson/source/repos/personal/mcp-sql-server/venv/bin/python",
+      "args": [
+        "/users/is/kewilson/source/repos/personal/mcp-sql-server/sql_server_stdio.py"
+      ]
+    }
+  }
+}

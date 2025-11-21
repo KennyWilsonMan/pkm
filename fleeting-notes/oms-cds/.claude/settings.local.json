@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__sql-server__test_sql_connection",
+      "mcp__sql-server__execute_sql_query",
+      "mcp__sql-server__get_table_schema"
+    ]
+  },
+  "enabledMcpjsonServers": [
+    "bitbucket",
+    "sql-server"
+  ]
+}
