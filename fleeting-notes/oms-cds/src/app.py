@@ -1389,12 +1389,351 @@ elif analysis_mode == "CDS Creator":
     with col2:
         st.markdown(f"<div style='text-align: right; padding: 1rem;'><span style='background-color: #4CAF50; color: white; padding: 0.5rem 1rem; border-radius: 0.25rem; font-weight: bold;'>{env.upper()}</span></div>", unsafe_allow_html=True)
 
-    st.info("💡 **CDS Creator Tool** - Under construction")
+    st.info("💡 **CDS Creator Tool** - Create new CDS positions")
     st.markdown("---")
 
-    # Empty space for future development
-    st.markdown("### Coming Soon")
-    st.write("This section will contain tools for creating new CDS positions in the OMS system.")
+    # Get currencies from database
+    try:
+        query_currencies = """
+        SELECT DISTINCT
+            C.CURRENCY_ID,
+            C.ISO_CODE
+        FROM
+            Inventory.SECURITY S
+            INNER JOIN Inventory.CURRENCY C ON S.CURRENCY_ID = C.CURRENCY_ID
+        WHERE
+            S.SECURITY_CLASS_ID = 29  -- Credit Default Swap
+            AND S.END_DT > GETDATE()
+            AND C.END_DT > GETDATE()
+        ORDER BY
+            C.ISO_CODE
+        """
+        df_currencies = execute_query(env, query_currencies)
+
+        if not df_currencies.empty:
+            # Create mapping of ISO_CODE to CURRENCY_ID
+            currency_map = dict(zip(df_currencies['ISO_CODE'], df_currencies['CURRENCY_ID']))
+            currency_options = df_currencies['ISO_CODE'].tolist()
+
+            # Get reference entities from database
+            try:
+                query_ref_entities = """
+                SELECT DISTINCT
+                    I.ISSUER_ID,
+                    I.ISSUER_NAME,
+                    I.LEGAL_ENTITY_ID,
+                    LE.MARKIT_RED_ENTITY
+                FROM
+                    Inventory.SECURITY S
+                    INNER JOIN Inventory.ISSUER I ON S.ISSUER_ID = I.ISSUER_ID
+                    LEFT JOIN Inventory.LEGAL_ENTITY LE ON I.LEGAL_ENTITY_ID = LE.LEGAL_ENTITY_ID
+                WHERE
+                    S.SECURITY_CLASS_ID = 29  -- Credit Default Swap
+                    AND S.END_DT > GETDATE()
+                    AND I.END_DT > GETDATE()
+                ORDER BY
+                    I.ISSUER_NAME
+                """
+                df_ref_entities = execute_query(env, query_ref_entities)
+
+                if not df_ref_entities.empty:
+                    # Create mapping of ISSUER_NAME to tuple of (ISSUER_ID, LEGAL_ENTITY_ID, RED_CODE)
+                    issuer_map = {}
+                    for _, row in df_ref_entities.iterrows():
+                        issuer_map[row['ISSUER_NAME']] = {
+                            'issuer_id': row['ISSUER_ID'],
+                            'legal_entity_id': row['LEGAL_ENTITY_ID'],
+                            'red_code': row['MARKIT_RED_ENTITY']
+                        }
+                    issuer_options = df_ref_entities['ISSUER_NAME'].tolist()
+
+                    # Generate maturity dates (20th of Mar, Jun, Sep, Dec for next 5 years)
+                    from datetime import datetime, date
+                    from dateutil.relativedelta import relativedelta
+
+                    today = date.today()
+                    maturity_dates = []
+                    maturity_map = {}
+
+                    # Generate dates for next 5 years
+                    months = [3, 6, 9, 12]  # Mar, Jun, Sep, Dec
+                    month_names = {3: 'mar', 6: 'jun', 9: 'sep', 12: 'dec'}
+
+                    for year_offset in range(6):  # Current year + 5 more years
+                        target_year = today.year + year_offset
+                        for month in months:
+                            maturity_date = date(target_year, month, 20)
+                            # Only include future dates
+                            if maturity_date > today:
+                                # Create label like "mar25", "jun25", etc.
+                                label = f"{month_names[month]}{str(target_year)[2:]}"
+                                maturity_dates.append(label)
+                                maturity_map[label] = maturity_date
+
+                    # Create form
+                    with st.form("cds_creator_form"):
+                        st.markdown("## 📝 CDS Security Information")
+
+                        # Section 1: Basic Security Info
+                        st.markdown("### 1️⃣ Security Details")
+
+                        # Row 1: Currency, Maturity, Coupon
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            selected_currency_iso = st.selectbox(
+                                "Security Currency *",
+                                options=currency_options,
+                                help="Currency in which the CDS is denominated"
+                            )
+
+                        with col2:
+                            selected_maturity_label = st.selectbox(
+                                "Maturity Date *",
+                                options=maturity_dates,
+                                help="Select CDS maturity (20th of Mar/Jun/Sep/Dec)"
+                            )
+
+                        with col3:
+                            coupon_rate = st.number_input(
+                                "Coupon Rate (%) *",
+                                min_value=0.0,
+                                max_value=100.0,
+                                value=1.0,
+                                step=0.0001,
+                                format="%.4f",
+                                help="Annual coupon rate (e.g., 1.0000 for 1%)"
+                            )
+
+                        # Row 2: Docs Clause
+                        # Create mapping for docs clause
+                        docs_clause_map = {
+                            "CR - Credit Risk": 1,
+                            "MM - Money Market": 2,
+                            "MR - Market Risk": 3,
+                            "XR - Cross Risk (Exchange Risk)": 4,
+                            "CR14 - Credit Risk (14-day)": 5,
+                            "MM14 - Money Market (14-day)": 6,
+                            "MR14 - Market Risk (14-day)": 7,
+                            "XR14 - Cross Risk (14-day, Exchange Risk)": 8
+                        }
+                        docs_clause_options = list(docs_clause_map.keys())
+
+                        selected_docs_clause_label = st.selectbox(
+                            "Docs Clause *",
+                            options=docs_clause_options,
+                            help="Documentation clause type for the CDS"
+                        )
+
+                        st.markdown("---")
+
+                        # Section 2: Reference Entity
+                        st.markdown("### 2️⃣ Reference Entity")
+                        st.info(f"💡 Searching through {len(issuer_options):,} reference entities")
+
+                        # Use multiselect with max_selections=1 for searchable single selection
+                        selected_issuer_names = st.multiselect(
+                            "Reference Entity (Issuer) *",
+                            options=issuer_options,
+                            max_selections=1,
+                            help="Type to search through 1,300+ reference entities"
+                        )
+
+                        st.markdown("---")
+
+                        # Submit button
+                        submitted = st.form_submit_button(
+                            "🚀 Create CDS",
+                            type="primary",
+                            use_container_width=True
+                        )
+
+                    # Handle form submission
+                    if submitted:
+                        # Validation
+                        errors = []
+                        if not selected_issuer_names:
+                            errors.append("Reference Entity is required")
+
+                        if errors:
+                            st.error("❌ **Validation Errors:**")
+                            for error in errors:
+                                st.markdown(f"- {error}")
+                        else:
+                            # Get the currency_id from the selected ISO code
+                            selected_currency_id = currency_map[selected_currency_iso]
+
+                            # Get the issuer data from the selected issuer name
+                            selected_issuer_name = selected_issuer_names[0]
+                            issuer_data = issuer_map[selected_issuer_name]
+                            selected_issuer_id = issuer_data['issuer_id']
+                            selected_legal_entity_id = issuer_data['legal_entity_id']
+                            selected_red_code = issuer_data['red_code']
+
+                            # Get the maturity date from the selected label
+                            selected_maturity_date = maturity_map[selected_maturity_label]
+
+                            # Get the docs clause ID from the selected label
+                            selected_docs_clause_id = docs_clause_map[selected_docs_clause_label]
+
+                            st.success("✅ **CDS Information Captured**")
+
+                            # Display all selections
+                            st.markdown("### 📋 All Selections")
+
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                st.markdown("#### Security Information")
+                                st.write(f"**Currency ISO:** {selected_currency_iso}")
+                                st.write(f"**Currency ID:** {selected_currency_id}")
+                                st.write(f"**Maturity Label:** {selected_maturity_label}")
+                                st.write(f"**Maturity Date:** {selected_maturity_date.strftime('%Y-%m-%d')}")
+                                st.write(f"**Coupon Rate:** {coupon_rate:.4f}%")
+                                st.write(f"**Docs Clause:** {selected_docs_clause_label}")
+                                st.write(f"**Docs Clause ID:** {selected_docs_clause_id}")
+                            with col2:
+                                st.markdown("#### Reference Entity")
+                                st.write(f"**Issuer Name:** {selected_issuer_name}")
+                                st.write(f"**Issuer ID:** {selected_issuer_id}")
+                                st.write(f"**Legal Entity ID:** {selected_legal_entity_id}")
+                                st.write(f"**RED Code:** {selected_red_code if pd.notna(selected_red_code) else 'N/A'}")
+
+                            st.markdown("---")
+
+                            # Summary for database insertion
+                            st.markdown("### 🗄️ Database Values")
+                            st.code(f"""
+Security Table:
+- CURRENCY_ID: {selected_currency_id}
+- MATURITY_DATE: {selected_maturity_date}
+- ISSUER_ID: {selected_issuer_id}
+- SECURITY_CLASS_ID: 29 (Credit Default Swap)
+
+Security Fixed Income Table:
+- COUPON_RATE: {coupon_rate}
+- DOCS_CLAUSE_ID: {selected_docs_clause_id}
+
+Issuer/Legal Entity Info:
+- LEGAL_ENTITY_ID: {selected_legal_entity_id}
+- RED_CODE: {selected_red_code if pd.notna(selected_red_code) else 'N/A'}
+                            """, language="python")
+
+                            st.info("💡 These values are ready for database insertion")
+
+                            # Add button to actually create the security
+                            st.markdown("---")
+                            st.markdown("### 🚀 Create Security")
+
+                            if st.button("📤 Call API to Create CDS Security", type="primary", use_container_width=True):
+                                try:
+                                    import requests
+                                    import subprocess
+
+                                    # Get Kerberos ticket for authentication
+                                    st.info("🔐 Authenticating with Kerberos...")
+
+                                    # The SecurityEnvoy API endpoint
+                                    api_url = "https://rosa-securityenvoy-n1-dev.maninvestments.ad.man.com:8374/api/GenericSecurity/GetOrCreateCdsOnSingleName"
+
+                                    # Prepare the request payload
+                                    payload = {
+                                        "currencyId": selected_currency_id,
+                                        "maturityDate": selected_maturity_date.strftime('%Y-%m-%d'),
+                                        "issuerId": selected_issuer_id,
+                                        "couponRate": coupon_rate,
+                                        "docsClauseId": selected_docs_clause_id
+                                    }
+
+                                    st.write("**Request Payload:**")
+                                    st.json(payload)
+
+                                    # Make the API call with Kerberos authentication
+                                    # Using requests-kerberos for automatic Kerberos authentication
+                                    from requests_kerberos import HTTPKerberosAuth, OPTIONAL
+
+                                    response = requests.post(
+                                        api_url,
+                                        json=payload,
+                                        auth=HTTPKerberosAuth(mutual_authentication=OPTIONAL),
+                                        headers={
+                                            "Content-Type": "application/json",
+                                            "Accept": "application/json"
+                                        },
+                                        verify=True  # Verify SSL certificate
+                                    )
+
+                                    # Check response
+                                    if response.status_code in [200, 201]:
+                                        st.success("✅ **CDS Security Created Successfully!**")
+                                        st.write("**Response:**")
+                                        st.json(response.json())
+
+                                        # Display created security details
+                                        created_data = response.json()
+                                        if 'securityId' in created_data:
+                                            st.balloons()
+                                            st.success(f"🎉 **Security ID: {created_data['securityId']}**")
+                                    else:
+                                        st.error(f"❌ **API Error ({response.status_code})**")
+                                        st.write("**Error Response:**")
+                                        st.code(response.text)
+
+                                except ImportError as e:
+                                    st.error("❌ **Missing Required Package**")
+                                    st.code("""
+# Install required package:
+pip install requests-kerberos
+
+# Or in your pegasus environment:
+pegasus activate your-env
+pip install requests-kerberos
+                                    """)
+                                    st.info("💡 `requests-kerberos` is needed for Kerberos authentication")
+
+                                except Exception as e:
+                                    st.error(f"❌ **Error calling API:** {str(e)}")
+                                    with st.expander("🔧 Error Details"):
+                                        import traceback
+                                        st.code(traceback.format_exc())
+
+                                    st.info("""
+💡 **Troubleshooting Steps:**
+
+1. **Check Kerberos ticket:**
+   ```bash
+   klist
+   ```
+
+2. **Renew ticket if expired:**
+   ```bash
+   kinit
+   ```
+
+3. **Verify network access:**
+   ```bash
+   curl -I https://rosa-securityenvoy-n1-dev.maninvestments.ad.man.com:8374/swagger/index.html
+   ```
+
+4. **Check API documentation:**
+   https://rosa-securityenvoy-n1-dev.maninvestments.ad.man.com:8374/swagger/index.html
+                                    """)
+
+                else:
+                    st.warning("⚠️ No reference entities found in the system")
+
+            except Exception as e:
+                st.error(f"❌ Error loading reference entities: {str(e)}")
+                with st.expander("🔧 Error Details"):
+                    import traceback
+                    st.code(traceback.format_exc())
+
+        else:
+            st.warning("⚠️ No currencies found in the system")
+
+    except Exception as e:
+        st.error(f"❌ Error loading currencies: {str(e)}")
+        with st.expander("🔧 Error Details"):
+            import traceback
+            st.code(traceback.format_exc())
 
 # Footer
 st.markdown("---")
