@@ -8,6 +8,10 @@ AUTH_URL = "https://keycloak-lon.prod.m/auth/realms/master/protocol/openid-conne
 TOKEN_URL = "https://keycloak-lon.prod.m/auth/realms/master/protocol/openid-connect/token"
 CLIENT_ID = "tpc-oms-tradeentrydashboard-uat"
 
+# AUTH_URL = "https://devkeycloak.maninvestments.com/auth/realms/rosacore-dev/protocol/openid-connect/auth"
+# TOKEN_URL = "https://devkeycloak.maninvestments.com/auth/realms/rosacore-dev/protocol/openid-connect/auth/token"
+# CLIENT_ID = "rosa-openapi-client"
+
 base_url = get_base_url()
 
 # Really horrible but the JS that extracts the URL seems to blow up
